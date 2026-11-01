@@ -536,7 +536,7 @@ glbsp_ret_e GlbspBuildNodes(const nodebuildinfo_t *info,
   PrintVerbose("Creating nodes using tunable factor of %d\n", info->factor);
 
   DisplayOpen(DIS_BUILDPROGRESS);
-  DisplaySetTitle("glBSP Build Progress");
+  DisplaySetTitle("D64BSP Build Progress");
 
   file_msg = UtilFormat("File: %s", cur_info->input_file);
  

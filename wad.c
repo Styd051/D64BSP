@@ -1292,7 +1292,7 @@ glbsp_ret_e ReadWadFile(const char *filename)
   ReadDirectory();
 
   DisplayOpen(DIS_FILEPROGRESS);
-  DisplaySetTitle("glBSP Reading Wad");
+  DisplaySetTitle("D64BSP Reading Wad");
   
   read_msg = UtilFormat("Reading: %s", filename);
 
@@ -1349,7 +1349,7 @@ glbsp_ret_e WriteWadFile(const char *filename)
   WriteHeader();
 
   DisplayOpen(DIS_FILEPROGRESS);
-  DisplaySetTitle("glBSP Writing Wad");
+  DisplaySetTitle("D64BSP Writing Wad");
   
   write_msg = UtilFormat("Writing: %s", filename);
 

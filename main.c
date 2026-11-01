@@ -42,15 +42,17 @@ static void ShowTitle(void)
 {
   TextPrintMsg(
     "\n"
-    "**** GLBSP Node Builder " GLBSP_VER " (C) 2007 Andrew Apted ****\n\n"
+    "**** D64BSP, the node builder of Doom 64 ****\n"
+    "**** Based on glBSP " GLBSP_VER " (C) 2007 Andrew Apted ****\n\n"
   );
 }
 
 static void ShowInfo(void)
 {
   TextPrintMsg(
-    "This GL node builder was originally based on BSP 2.3, which was\n"
-    "created from the basic theory stated in DEU5 (OBJECTS.C)\n"
+    "D64BSP is glBSP adapted to Doom 64 by Samuel Villarreal (Kaiser).\n"
+    "glBSP was originally based on BSP 2.3, which was created from the\n"
+    "basic theory stated in DEU5 (OBJECTS.C)\n"
     "\n"
     "Credits should go to :-\n"
     "  Janis Legzdinsh            for fixing up Hexen support\n"
@@ -66,17 +68,17 @@ static void ShowInfo(void)
     "Public License, and comes with ABSOLUTELY NO WARRANTY.  See the\n"
     "accompanying documentation for more details.\n"
     "\n"
-    "Usage: glbsp [options] input.wad ... [-o output.wad]\n"
-    "Or:    glbsp @arg_file.rsp\n"
+    "Usage: D64BSP [options] input.wad ... [-o output.wad]\n"
+    "Or:    D64BSP @arg_file.rsp\n"
     "\n"
-    "For a list of the available options, type: glbsp -help\n"
+    "For a list of the available options, type: D64BSP -help\n"
   );
 }
 
 static void ShowOptions(void)
 {
   TextPrintMsg(
-    "Usage: glbsp [options] input.wad ... [-o output.wad]\n"
+    "Usage: D64BSP [options] input.wad ... [-o output.wad]\n"
     "\n"
     "General Options:\n"
     "  -q  -quiet         Quieter output, no level stats\n"

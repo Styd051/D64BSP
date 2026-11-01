@@ -1660,7 +1660,7 @@ void LoadLevel(void)
   lev_doing_hexen = (FindLevelLump("BEHAVIOR") != NULL);
 
   if (lev_doing_normal)
-    message = UtilFormat("Building normal and GL nodes on %s%s",
+    message = UtilFormat("Building nodes on %s%s",
         level_name, lev_doing_hexen ? " (Hexen)" : "");
   else
     message = UtilFormat("Building GL nodes on %s%s",
