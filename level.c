@@ -798,6 +798,45 @@ void PutVertices(char *name, int do_gl)
     MarkSoftFailure(LIMIT_VERTEXES);
 }
 
+// a sector that is not closed gets no miniseg over a gap in the polygon of a
+// subsector.  LEAFS only holds the first vertex of each seg, so the last vertex
+// of the seg before a gap needs a corner of its own, or the polygon loses it.
+
+static vertex_t *CornerBeforeGap(const subsec_t *sub, const seg_t *seg)
+{
+	const seg_t *next = seg->next;
+	const seg_t *cur;
+	float_g x1, y1, x2, y2;
+
+	while(next && next->hidden)
+		next = next->next;
+
+	if(!next)
+		next = sub->seg_list;
+
+	// the polygon has this corner when a seg starts at it
+	for(cur = sub->seg_list; cur; cur = cur->next)
+	{
+		if(!cur->hidden && fabs(seg->end->x - cur->start->x) < DIST_EPSILON &&
+			fabs(seg->end->y - cur->start->y) < DIST_EPSILON)
+			return NULL;
+	}
+
+	// seen from the middle of the subsector the next seg must start clockwise
+	// from this end.  Otherwise this seg goes past it (two lines almost over
+	// each other), and a corner here would fold the polygon.
+
+	x1 = seg->end->x - sub->mid_x;
+	y1 = seg->end->y - sub->mid_y;
+	x2 = next->start->x - sub->mid_x;
+	y2 = next->start->y - sub->mid_y;
+
+	if(x1 * y2 - y1 * x2 >= 0)
+		return NULL;
+
+	return seg->end;
+}
+
 void PutLeafs(void)
 {
 	lump_t *lump;
@@ -820,7 +859,12 @@ void PutLeafs(void)
 		for(seg = sub->seg_list; seg; seg = seg->next)
 		{
 			if(!seg->hidden)
+			{
 				count++;
+
+				if(CornerBeforeGap(sub, seg))
+					count++;
+			}
 		}
 
 		AppendLevelLump(lump, &count, 2);
@@ -861,6 +905,16 @@ void PutLeafs(void)
 			}
 			else
 				AppendLevelLump(lump, &miniseg, 2);
+
+			vert = CornerBeforeGap(sub, seg);
+
+			if(vert)
+			{
+				v = vert->index;
+
+				AppendLevelLump(lump, &v, 2);
+				AppendLevelLump(lump, &miniseg, 2);
+			}
 
 			seg = seg->next;
 		}

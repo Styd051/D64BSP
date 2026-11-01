@@ -18,9 +18,10 @@ these 7 maps, byte for byte.
   - the BLOCKMAP follows the rule of the tool of Midway, which gives back the lump of MAP01 to MAP33, byte for byte.
   - the offset of a seg is rounded down, and each new vertex is written once, as Midway did.
   - `-p` keeps every texture, and the limits of the engines are checked.
+  - a subsector keeps its corner before a gap left by a sector that is not closed.
 - A map with no overlapping lines and no fractions in the vertices of its lines gets the same tree as with the
-  version of Kaiser. SEGS and LEAFS only differ by the offsets and the numbers of the new vertices, and the BLOCKMAP
-  by its layout.
+  version of Kaiser. SEGS and LEAFS only differ by the offsets, the numbers of the new vertices and the corners before
+  a gap, and the BLOCKMAP by its layout.
 
 ## Building
 
@@ -106,6 +107,10 @@ The rule of the BLOCKMAP comes from the 33 lumps of Midway:
 - Each block has its own list, in the order of the blocks: its lines by number, then -1, and no line 0 at the start.
 - With the exact coordinates, a line is in a block when its bounds reach the block, the high edges of the block being
   left out, and the four corners of the block are not strictly on the same side of the line.
+
+A sector that is not closed leaves a gap in the polygon of a subsector, where no edge was made. LEAFS holds the first
+vertex of each edge, so the last vertex before the gap gets its own entry, with the seg -1, and the floor keeps that
+corner. A corner that no edge of the subsector reaches stays out: such a map still has to be closed.
 
 ## What the engines do with these lumps
 
