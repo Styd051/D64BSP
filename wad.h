@@ -97,6 +97,7 @@ level_t;
 #define LIMIT_BMAP_TRUNC   0x002000
 #define LIMIT_BLOCKMAP     0x004000
 #define LIMIT_ZDBSP        0x008000
+#define LIMIT_CORNERS      0x010000
 
 
 // directory entry

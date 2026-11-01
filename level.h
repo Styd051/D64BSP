@@ -132,11 +132,6 @@ typedef struct sidedef_s
   // offset values
   int x_offset, y_offset;
 
-  // texture names
-  char upper_tex[8];
-  char lower_tex[8];
-  char mid_tex[8];
-
   // d64 stuff
   int upper_index;
   int lower_index;

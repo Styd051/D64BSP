@@ -318,8 +318,6 @@ static int VertexCompare(const void *p1, const void *p2)
 
 static int SidedefCompare(const void *p1, const void *p2)
 {
-  int comp;
-
   int side1 = ((const uint16_g *) p1)[0];
   int side2 = ((const uint16_g *) p2)[0];
 
@@ -330,7 +328,10 @@ static int SidedefCompare(const void *p1, const void *p2)
     return 0;
 
   // don't merge sidedefs on special lines
-  if (A->on_special || B->on_special)
+  if (A->on_special != B->on_special)
+    return A->on_special - B->on_special;
+
+  if (A->on_special)
     return side1 - side2;
 
   if (A->sector != B->sector)
@@ -349,14 +350,14 @@ static int SidedefCompare(const void *p1, const void *p2)
 
   // compare textures
 
-  comp = memcmp(A->upper_tex, B->upper_tex, sizeof(A->upper_tex));
-  if (comp) return comp;
-  
-  comp = memcmp(A->lower_tex, B->lower_tex, sizeof(A->lower_tex));
-  if (comp) return comp;
-  
-  comp = memcmp(A->mid_tex, B->mid_tex, sizeof(A->mid_tex));
-  if (comp) return comp;
+  if (A->upper_index != B->upper_index)
+    return A->upper_index - B->upper_index;
+
+  if (A->lower_index != B->lower_index)
+    return A->lower_index - B->lower_index;
+
+  if (A->mid_index != B->mid_index)
+    return A->mid_index - B->mid_index;
 
   // sidedefs must be the same
   return 0;

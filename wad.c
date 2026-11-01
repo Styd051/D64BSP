@@ -1585,6 +1585,7 @@ void ReportOneOverflow(const lump_t *lump, int limit, boolean_g hard)
     case LIMIT_BAD_SIDE:   PrintMsg("One or more linedefs has a bad sidedef.\n"); break;
     case LIMIT_BMAP_TRUNC: PrintMsg("Blockmap area was too big - truncated.\n"); break;
     case LIMIT_BLOCKMAP:   PrintMsg("Blockmap lump %s.\n", msg); break;
+    case LIMIT_CORNERS:    PrintMsg("A subsector has more than 32 corners.\n"); break;
 
     default:
       InternalError("UNKNOWN LIMIT BIT: 0x%06x", limit);
@@ -1601,14 +1602,15 @@ void ReportOverflows(boolean_g hard)
   {
     PrintMsg(
       "ERRORS.  The following levels failed to be built, and won't\n"
-      "work in any Doom port (and may even crash it).\n\n"
+      "work in any of the engines (and may even crash them).\n\n"
     );
   }
   else  // soft
   {
     PrintMsg(
-      "POTENTIAL FAILURES.  The following levels should work in a\n"
-      "modern Doom port, but may fail (or even crash) in older ports.\n\n"
+      "POTENTIAL FAILURES.  The following levels should work in\n"
+      "Doom64 EX and the remaster, but may fail (or even crash) on\n"
+      "the Nintendo 64.\n\n"
     );
   }
 

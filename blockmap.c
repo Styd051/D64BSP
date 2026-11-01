@@ -58,8 +58,10 @@ static int block_shared;
 
 #define DUMMY_DUP  0xFFFF
 
-// the three engines read the offsets of the lists as signed numbers
+// the three engines read the offsets of the lists and the numbers of the
+// lines as signed numbers
 #define BLOCK_MAX_OFFSET  32767
+#define BLOCK_MAX_LINES   32768
 
 
 //
@@ -659,6 +661,13 @@ void InitBlockmap(void)
 //
 void PutBlockmap(void)
 {
+  if (num_linedefs > BLOCK_MAX_LINES)
+  {
+    FatalError("%s has %d lines: the BLOCKMAP can only hold the %d first ones, "
+        "the engines read the higher numbers as negative", GetLevelName(),
+        num_linedefs, BLOCK_MAX_LINES);
+  }
+
   UseMidwayBounds();
 
   // truncate blockmap if too large.  We're limiting the number of

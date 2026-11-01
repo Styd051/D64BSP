@@ -17,6 +17,7 @@ these 7 maps, byte for byte.
     lines with fractions stay close to the true line.
   - the BLOCKMAP follows the rule of the tool of Midway, which gives back the lump of MAP01 to MAP33, byte for byte.
   - the offset of a seg is rounded down, and each new vertex is written once, as Midway did.
+  - `-p` keeps every texture, and the limits of the engines are checked.
 - A map with no overlapping lines and no fractions in the vertices of its lines gets the same tree as with the
   version of Kaiser. SEGS and LEAFS only differ by the offsets and the numbers of the new vertices, and the BLOCKMAP
   by its layout.
@@ -61,6 +62,7 @@ it the program only writes an empty `.gwa` file. `@file` reads the arguments fro
 | `-b n` | Number of blocks above which the BLOCKMAP is cut, 16000 by default, from 1000 to 64000 |
 | `-xr` | Keeps the REJECT of the input |
 | `-m` | Merges the vertices at the same place |
+| `-p` | Merges the sides that are the same, except those of lines with an action, a tag, a switch or a scrolling flag, which the game changes during play |
 | `-u` | Removes the sectors that no side uses, which renumbers the sectors after them |
 | `-xu` | Keeps the sides that no line uses, and lines of no length |
 
@@ -71,7 +73,6 @@ the maps it was tried on.
 
 | Option | Why |
 |---|---|
-| `-p` | Merges sides without comparing their textures, and even on lines with an action: walls lose their textures. It changed 702 sides of lines on MAP01 |
 | `-s` | Skips the lines with the same sector on both sides: these lines get no angle in the engines |
 | `-v1` | Uses an old rounding of glBSP for the segs, which changes VERTEXES, SEGS and LEAFS |
 | `-hexen` | Reads and writes the lines in the format of Hexen, which changes LINEDEFS |
@@ -143,14 +144,19 @@ same, and the maps still work:
 
 ## Limits
 
-- 32 corners for a floor on the Nintendo 64. D64BSP does not check it. The largest leaf of the maps of the game has 30.
-- 32767 vertices, segs and subsectors on the Nintendo 64. D64BSP does not check the vertices.
+- 32 corners for a floor on the Nintendo 64. D64BSP reports the subsectors above that in its problem report. The
+  largest leaf of the maps of the game has 30.
+- 32767 vertices and segs on the Nintendo 64. D64BSP reports them in its problem report: such a map still works in the
+  two other engines. Above 32767 subsectors or nodes it reports an error.
+- 32768 lines: the BLOCKMAP holds their numbers as signed numbers too. Above that D64BSP stops with an error and writes
+  nothing.
 - The offsets of the BLOCKMAP are signed in the three engines: a list must start within the first 32767 words. When
   a list for each block goes beyond that, the blocks with the same lines share one list. When that is not enough,
   D64BSP stops with an error and writes nothing. The largest lump seen has 17360 words, in a map of the Mzansi project.
 - Above 16000 blocks the BLOCKMAP is cut, and lines outside of it no longer stop things. Use `-b` for a larger map.
 - Sectors and lines with the tags 900 to 999 keep the rules of glBSP for special effects of Doom: such a line is
-  avoided as a partition. The maps of the game do not need this.
+  avoided as a partition. The game gives the tag 999 another meaning, a line that starts with the level: 2 lines have
+  it, in MAP20 and MAP33, and only the choice of the partitions changes for them.
 
 ## Files
 

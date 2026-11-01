@@ -103,6 +103,8 @@ typedef struct raw_hexen_linedef_s
 raw_hexen_linedef_t;
 
 #define LINEFLAG_TWO_SIDED  4
+#define LINEFLAG_SWITCH     0xE000  // the three switch flags
+#define LINEFLAG_SCROLL     0x1E    // the four scrolling flags, in renderflags
 
 #define HEXTYPE_POLY_START     1
 #define HEXTYPE_POLY_EXPLICIT  5
@@ -154,6 +156,7 @@ raw_sector_t;
 typedef struct raw_thing_s
 {
   sint16_g x, y;      // position of thing
+  sint16_g z;         // height of thing
   sint16_g angle;     // angle thing faces (degrees)
   uint16_g type;      // type of thing
   uint16_g options;   // when appears, deaf, etc..

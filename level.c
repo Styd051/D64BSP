@@ -505,6 +505,7 @@ void GetLinedefs(void)
   for (i=0; i < count; i++, raw++)
   {
     linedef_t *line;
+    int sides_change;
 
     vertex_t *start = LookupVertex(UINT16(raw->start));
     vertex_t *end   = LookupVertex(UINT16(raw->end));
@@ -527,7 +528,7 @@ void GetLinedefs(void)
 	line->specials[2] = UINT8(raw->type);
 	line->specials[3] = UINT8(raw->usetype);
 
-    //line->type = UINT16(raw->type);
+    line->type = line->specials[2] | (line->specials[3] << 8);
     line->tag  = UINT16(raw->tag);
 
     line->two_sided = (line->flags & LINEFLAG_TWO_SIDED) ? TRUE : FALSE;
@@ -537,16 +538,24 @@ void GetLinedefs(void)
     line->right = SafeLookupSidedef(UINT16(raw->sidedef1));
     line->left  = SafeLookupSidedef(UINT16(raw->sidedef2));
 
+    // the game changes the sides of these lines during play: a switch
+    // changes a texture, the scrolling flags change the offsets, and the
+    // action 219 changes the textures of all the lines of a tag.
+
+    sides_change = (line->type != 0 || line->tag != 0 ||
+        (line->flags & LINEFLAG_SWITCH) != 0 ||
+        (line->specials[0] & LINEFLAG_SCROLL) != 0) ? 1 : 0;
+
     if (line->right)
     {
       line->right->ref_count++;
-      line->right->on_special |= (line->type > 0) ? 1 : 0;
+      line->right->on_special |= sides_change;
     }
 
     if (line->left)
     {
       line->left->ref_count++;
-      line->left->on_special |= (line->type > 0) ? 1 : 0;
+      line->left->on_special |= sides_change;
     }
 
     line->self_ref = (line->left && line->right &&
@@ -777,17 +786,16 @@ void PutVertices(char *name, int do_gl)
 		vert->index = real_vert_num + (vert->index & ~IS_GL_VERTEX);
 
 		AppendLevelLump(lump, &raw, sizeof(raw));
+
+		count++;
 	}
   }
 
-  /*if (count != (do_gl ? num_gl_vert : num_normal_vert))
-    InternalError("PutVertices miscounted (%d != %d)", count,
-      do_gl ? num_gl_vert : num_normal_vert);
-
-  if (lev_doing_normal && ! do_gl && count > 65534)
+  // the Nintendo 64 reads the numbers of the vertices as signed numbers
+  if (count > 65534)
     MarkHardFailure(LIMIT_VERTEXES);
   else if (count > 32767)
-    MarkSoftFailure(do_gl ? LIMIT_GL_VERT : LIMIT_VERTEXES);*/
+    MarkSoftFailure(LIMIT_VERTEXES);
 }
 
 void PutLeafs(void)
@@ -796,6 +804,8 @@ void PutLeafs(void)
 	int i = 0;
 	int j = 0;
 	int idx = 0;
+	int too_many = 0;
+	int most = 0;
 
 	DisplayTicker();
 
@@ -814,6 +824,13 @@ void PutLeafs(void)
 		}
 
 		AppendLevelLump(lump, &count, 2);
+
+		// the Nintendo 64 only draws the first 32 corners of a floor
+		if(count > 32)
+			too_many++;
+
+		if(count > most)
+			most = count;
 
 		seg = sub->seg_list;
 
@@ -847,6 +864,14 @@ void PutLeafs(void)
 
 			seg = seg->next;
 		}
+	}
+
+	if(too_many > 0)
+	{
+		PrintMiniWarn("%d subsectors have more than 32 corners, the largest has %d\n",
+			too_many, most);
+
+		MarkSoftFailure(LIMIT_CORNERS);
 	}
 }
 
@@ -1825,33 +1850,6 @@ void SaveLevel(node_t *root_node)
 
   // GL Nodes
   {
-    if (num_normal_vert > 32767 || num_gl_vert > 32767)
-    {
-      if (cur_info->spec_version < 3)
-      {
-        lev_force_v5 = TRUE;
-        MarkV5Switch(LIMIT_VERTEXES | LIMIT_GL_SEGS);
-      }
-    }
-
-    if (num_segs > 65534)
-    {
-      if (cur_info->spec_version < 3)
-      {
-        lev_force_v5 = TRUE;
-        MarkV5Switch(LIMIT_GL_SSECT | LIMIT_GL_SEGS);
-      }
-    }
-
-    if (num_nodes > 32767)
-    {
-      if (cur_info->spec_version < 5)
-      {
-        lev_force_v5 = TRUE;
-        MarkV5Switch(LIMIT_GL_NODES);
-      }
-    }
-
     //if (cur_info->spec_version == 1)
       //PutVertices("GL_VERT", TRUE);
     //else
