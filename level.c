@@ -696,7 +696,11 @@ static INLINE_G int TransformSegDist(const seg_t *seg)
   float_g sx = seg->side ? seg->linedef->end->x : seg->linedef->start->x;
   float_g sy = seg->side ? seg->linedef->end->y : seg->linedef->start->y;
 
-  return (int) ceil(UtilComputeDist(seg->start->x - sx, seg->start->y - sy));
+  // rounded down, as Midway did.  VERTEXES keeps 1/65536 of a unit, and a
+  // distance that close below a whole number is that number.
+
+  return (int) (UtilComputeDist(seg->start->x - sx, seg->start->y - sy) +
+      1.0 / 65536.0);
 }
 
 static INLINE_G int TransformAngle(angle_g angle)
@@ -1816,9 +1820,6 @@ void SaveLevel(node_t *root_node)
   lev_force_v3 = (cur_info->spec_version == 3) ? TRUE : FALSE;
   lev_force_v5 = (cur_info->spec_version == 5) ? TRUE : FALSE;
   
-  // Note: RoundOffBspTree will convert the GL vertices in segs to
-  // their normal counterparts (pointer change: use normal_dup).
-
   if (cur_info->spec_version == 1)
     RoundOffBspTree(root_node);
 

@@ -16,8 +16,10 @@ these 7 maps, byte for byte.
     Midway did; two lines in the same direction at a vertex no longer leave a polygon open; the partitions of
     lines with fractions stay close to the true line.
   - the BLOCKMAP follows the rule of the tool of Midway, which gives back the lump of MAP01 to MAP33, byte for byte.
-- A map with no overlapping lines and no fractions in the vertices of its lines gives the same lumps as the
-  version of Kaiser, except the BLOCKMAP.
+  - the offset of a seg is rounded down, and each new vertex is written once, as Midway did.
+- A map with no overlapping lines and no fractions in the vertices of its lines gets the same tree as with the
+  version of Kaiser. SEGS and LEAFS only differ by the offsets and the numbers of the new vertices, and the BLOCKMAP
+  by its layout.
 
 ## Building
 
@@ -36,7 +38,7 @@ cmake --build build --config Release
 
 Build it for 32 bits. `/arch:IA32` keeps the floating point of the x87, which `CMakeLists.txt` sets for a 32-bit
 build. With SSE2, or in a 64-bit build (the default of CMake without `-A Win32`), the angle of a few segs changes
-by one step in 65536: the maps still work, but SEGS then differs from the lump of the game on MAP35 and MAP38.
+by one step in 65536: the maps still work, but these angles then differ from those of the game on MAP35 and MAP38.
 
 `msvc6` holds the Visual C++ 6 project of Kaiser, and `Makefile` his gcc build. They were not tried in 2026.
 
@@ -85,7 +87,7 @@ a `SCRIPTS` lump after `MACROS`.
 | `THINGS` | 14 bytes each | Copied |
 | `LINEDEFS` | 16 | Rewritten, without the lines of no length |
 | `SIDEDEFS` | 12 | Rewritten, without the sides that no line uses |
-| `VERTEXES` | 8, 16.16 fixed point | The vertices of the lines, then a copy of each new vertex that nothing uses, then the new vertices |
+| `VERTEXES` | 8, 16.16 fixed point | The vertices of the lines, then the new vertices |
 | `SEGS` | 12 | Built |
 | `SSECTORS` | 4 | Built |
 | `NODES` | 28, whole numbers | Built |
@@ -128,13 +130,13 @@ They agree on the rest:
 
 ## Differences from the maps of Midway
 
-MAP01 to MAP33 were built with the tool of Midway. D64BSP gives back their BLOCKMAP byte for byte. The other lumps it
-builds are not the same, and the maps still work:
+MAP01 to MAP33 were built with the tool of Midway. D64BSP gives back their BLOCKMAP byte for byte, and 73362 of the
+73600 segs it puts at the same place as a seg of Midway have the same offset. The other lumps it builds are not the
+same, and the maps still work:
 
 | | Midway | D64BSP |
 |---|---|---|
-| Offset of a seg that does not start on a whole number | Rounded down | Rounded up, as in MAP34 to MAP40 |
-| New vertices | Written once | Written twice, the first copy is not used |
+| Offset of a cut seg on the back of a line | Negative in 424 cases of 2806, a fault of the tool | Rounded down, as all the others |
 | REJECT | A partial table, its method is not known | The groups of sectors that do not touch |
 | Direction of a partition | Scaled to a length of 256 | The line itself |
 | Vertices on the wrong side of a partition, worst case on MAP01 to MAP33 | 3.43 units | 0.50 units |

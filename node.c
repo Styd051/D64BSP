@@ -1330,13 +1330,6 @@ static void RoundOffSubsector(subsec_t *sub)
   // do an initial pass, just counting the degenerates
   for (cur=sub->seg_list; cur; cur=cur->next)
   {
-    // handle the duplex vertices
-    if (cur->start->normal_dup)
-      cur->start = cur->start->normal_dup;
-
-    if (cur->end->normal_dup)
-      cur->end = cur->end->normal_dup;
-
     // is the seg degenerate ?
     if (I_ROUND(cur->start->x) == I_ROUND(cur->end->x) &&
         I_ROUND(cur->start->y) == I_ROUND(cur->end->y))

@@ -1036,20 +1036,6 @@ vertex_t *NewVertexFromSplitSeg(seg_t *seg, float_g x, float_g y)
   VertexAddWallTip(vert, seg->pdx, seg->pdy,
       seg->partner ? seg->partner->sector : NULL, seg->sector);
 
-  // create a duplex vertex if needed
-
-  if (lev_doing_normal && cur_info->spec_version != 1)
-  {
-    vert->normal_dup = NewVertex();
-
-    vert->normal_dup->x = x;
-    vert->normal_dup->y = y;
-    vert->normal_dup->ref_count = vert->ref_count;
-
-    vert->normal_dup->index = num_normal_vert;
-    num_normal_vert++;
-  }
-
   return vert;
 }
 
