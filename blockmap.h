@@ -27,7 +27,8 @@
 #define DEFAULT_BLOCK_LIMIT  16000
 
 // compute blockmap origin & size (the block_x/y/w/h variables)
-// based on the set of loaded linedefs.
+// based on the set of loaded linedefs.  The superblocks use them;
+// PutBlockmap replaces them with the values of the lump.
 //
 void InitBlockmap(void);
 

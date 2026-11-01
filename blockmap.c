@@ -54,9 +54,12 @@ static uint16_g *block_ptrs;
 static uint16_g *block_dups;
 
 static int block_compression;
-static int block_overflowed;
+static int block_shared;
 
 #define DUMMY_DUP  0xFFFF
+
+// the three engines read the offsets of the lists as signed numbers
+#define BLOCK_MAX_OFFSET  32767
 
 
 //
@@ -188,23 +191,65 @@ static void BlockAdd(int blk_num, int line_index)
   cur[BK_NUM]++;
 }
 
+//
+// LineInBlock
+//
+// The test of the tool of Midway, on the exact coordinates.  The bounds of
+// the line must reach the block, its high edges being left out, and the four
+// corners of the block must not be strictly on the same side of the line.
+//
+static int LineInBlock(const linedef_t *L, float_g xl, float_g yl)
+{
+  float_g x1 = L->start->x;
+  float_g y1 = L->start->y;
+  float_g x2 = L->end->x;
+  float_g y2 = L->end->y;
+
+  float_g xh = xl + 128;
+  float_g yh = yl + 128;
+
+  float_g dx = x2 - x1;
+  float_g dy = y2 - y1;
+
+  int ahead = 0;
+  int behind = 0;
+  int i;
+
+  if (MIN(x1,x2) >= xh || MAX(x1,x2) < xl ||
+      MIN(y1,y2) >= yh || MAX(y1,y2) < yl)
+    return FALSE;
+
+  for (i=0; i < 4; i++)
+  {
+    float_g cx = (i & 1) ? xh : xl;
+    float_g cy = (i & 2) ? yh : yl;
+
+    float_g side = (cx - x1) * dy - (cy - y1) * dx;
+
+    if (side > 0) ahead++;
+    if (side < 0) behind++;
+  }
+
+  return (ahead < 4 && behind < 4);
+}
+
 static void BlockAddLine(linedef_t *L)
 {
-  int x1 = (int) L->start->x;
-  int y1 = (int) L->start->y;
-  int x2 = (int) L->end->x;
-  int y2 = (int) L->end->y;
+  float_g x1 = L->start->x;
+  float_g y1 = L->start->y;
+  float_g x2 = L->end->x;
+  float_g y2 = L->end->y;
 
-  int bx1 = (MIN(x1,x2) - block_x) / 128;
-  int by1 = (MIN(y1,y2) - block_y) / 128;
-  int bx2 = (MAX(x1,x2) - block_x) / 128;
-  int by2 = (MAX(y1,y2) - block_y) / 128;
+  int bx1 = (int) floor((MIN(x1,x2) - block_x) / 128);
+  int by1 = (int) floor((MIN(y1,y2) - block_y) / 128);
+  int bx2 = (int) floor((MAX(x1,x2) - block_x) / 128);
+  int by2 = (int) floor((MAX(y1,y2) - block_y) / 128);
 
   int bx, by;
   int line_index = L->index;
 
 # if DEBUG_BLOCKMAP
-  PrintDebug("BlockAddLine: %d (%d,%d) -> (%d,%d)\n", line_index, 
+  PrintDebug("BlockAddLine: %d (%1.1f,%1.1f) -> (%1.1f,%1.1f)\n", line_index,
       x1, y1, x2, y2);
 # endif
 
@@ -217,43 +262,12 @@ static void BlockAddLine(linedef_t *L)
   if (bx2 < bx1 || by2 < by1)
     return;
 
-  // handle simple case #1: completely horizontal
-  if (by1 == by2)
-  {
-    for (bx=bx1; bx <= bx2; bx++)
-    {
-      int blk_num = by1 * block_w + bx;
-      BlockAdd(blk_num, line_index);
-    }
-    return;
-  }
-
-  // handle simple case #2: completely vertical
-  if (bx1 == bx2)
-  {
-    for (by=by1; by <= by2; by++)
-    {
-      int blk_num = by * block_w + bx1;
-      BlockAdd(blk_num, line_index);
-    }
-    return;
-  }
-
-  // handle the rest (diagonals)
-
   for (by=by1; by <= by2; by++)
   for (bx=bx1; bx <= bx2; bx++)
   {
-    int blk_num = by * block_w + bx;
-  
-    int minx = block_x + bx * 128;
-    int miny = block_y + by * 128;
-    int maxx = minx + 127;
-    int maxy = miny + 127;
-
-    if (CheckLinedefInsideBox(minx, miny, maxx, maxy, x1, y1, x2, y2))
+    if (LineInBlock(L, block_x + bx * 128, block_y + by * 128))
     {
-      BlockAdd(blk_num, line_index);
+      BlockAdd(by * block_w + bx, line_index);
     }
   }
 }
@@ -276,6 +290,35 @@ static void CreateBlockmap(void)
 
     BlockAddLine(L);
   }
+}
+
+
+//
+// LayoutBlockmap
+//
+// One list for each block, in the order of the blocks, as in the maps of
+// Midway.  Returns FALSE when a list would start beyond the last offset.
+//
+static int LayoutBlockmap(void)
+{
+  int i;
+  int cur_offset = 4 + block_count;
+
+  block_ptrs = UtilCalloc(block_count * sizeof(uint16_g));
+  block_dups = UtilCalloc(block_count * sizeof(uint16_g));
+
+  for (i=0; i < block_count; i++)
+  {
+    if (cur_offset > BLOCK_MAX_OFFSET)
+      return FALSE;
+
+    block_ptrs[i] = cur_offset;
+    block_dups[i] = i;
+
+    cur_offset += 1 + (block_lines[i] ? block_lines[i][BK_NUM] : 0);
+  }
+
+  return TRUE;
 }
 
 
@@ -310,12 +353,10 @@ static void CompressBlockmap(void)
 {
   int i;
   int cur_offset;
+  int last_offset;
   int dup_count=0;
 
   int orig_size, new_size;
-
-  block_ptrs = UtilCalloc(block_count * sizeof(uint16_g));
-  block_dups = UtilCalloc(block_count * sizeof(uint16_g));
 
   DisplayTicker();
 
@@ -330,7 +371,8 @@ static void CompressBlockmap(void)
 
   // scan duplicate array and build up offset array
 
-  cur_offset = 4 + block_count + 2;
+  cur_offset = 4 + block_count + 1;
+  last_offset = 4 + block_count;
 
   orig_size = 4 + block_count;
   new_size  = cur_offset;
@@ -348,11 +390,11 @@ static void CompressBlockmap(void)
       block_ptrs[blk_num] = 4 + block_count;
       block_dups[i] = DUMMY_DUP;
 
-      orig_size += 2;
+      orig_size += 1;
       continue;
     }
 
-    count = 2 + block_lines[blk_num][BK_NUM];
+    count = 1 + block_lines[blk_num][BK_NUM];
 
     // duplicate ?  Only the very last one of a sequence of duplicates
     // will update the current offset value.
@@ -377,6 +419,7 @@ static void CompressBlockmap(void)
     // just a singleton.
 
     block_ptrs[blk_num] = cur_offset;
+    last_offset = cur_offset;
 
     cur_offset += count;
 
@@ -384,11 +427,11 @@ static void CompressBlockmap(void)
     new_size  += count;
   }
 
-  if (cur_offset > 65535)
+  if (last_offset > BLOCK_MAX_OFFSET)
   {
-    MarkSoftFailure(LIMIT_BLOCKMAP);
-    block_overflowed = TRUE;
-    return;
+    FatalError("The BLOCKMAP of %s is too large: a list starts at offset %d, "
+        "the engines read %d at most", GetLevelName(), last_offset,
+        BLOCK_MAX_OFFSET);
   }
 
 # if DEBUG_BLOCKMAP
@@ -412,13 +455,7 @@ static void WriteBlockmap(void)
 
   lump_t *lump = CreateLevelLump("BLOCKMAP");
 
-  uint16_g null_block[2] = { 0x0000, 0xFFFF };
-  uint16_g m_zero = 0x0000;
   uint16_g m_neg1 = 0xFFFF;
-  
-  // leave empty if the blockmap overflowed
-  if (block_overflowed)
-    return;
 
   // fill in header
   header.x_origin = UINT16(block_x);
@@ -440,7 +477,8 @@ static void WriteBlockmap(void)
   }
 
   // add the null block which _all_ empty blocks will use
-  AppendLevelLump(lump, null_block, sizeof(null_block));
+  if (block_shared)
+    AppendLevelLump(lump, &m_neg1, sizeof(uint16_g));
 
   // handle each block list
   for (i=0; i < block_count; i++)
@@ -454,11 +492,12 @@ static void WriteBlockmap(void)
 
     blk = block_lines[blk_num];
 
-    if (blk == NULL)
+    if (blk == NULL && block_shared)
       InternalError("WriteBlockmap: block %d is NULL !", i);
 
-    AppendLevelLump(lump, &m_zero, sizeof(uint16_g));
-    AppendLevelLump(lump, blk + BK_FIRST, blk[BK_NUM] * sizeof(uint16_g));
+    if (blk != NULL)
+      AppendLevelLump(lump, blk + BK_FIRST, blk[BK_NUM] * sizeof(uint16_g));
+
     AppendLevelLump(lump, &m_neg1, sizeof(uint16_g));
   }
 }
@@ -531,6 +570,42 @@ static void FindBlockmapLimits(bbox_t *bbox)
 }
 
 //
+// UseMidwayBounds
+//
+// The BLOCKMAP of the maps of Midway starts 8 units before their lowest
+// coordinates, and goes 8 units beyond their highest ones.  The values of
+// InitBlockmap stay until the nodes are built: the superblocks are made from
+// them, and they decide the order of the segs.
+//
+static void UseMidwayBounds(void)
+{
+  int i;
+
+  float_g min_x = 65536, min_y = 65536;
+  float_g max_x = -65536, max_y = -65536;
+
+  for (i=0; i < num_linedefs; i++)
+  {
+    linedef_t *L = LookupLinedef(i);
+
+    if (L->zero_len)
+      continue;
+
+    min_x = MIN(min_x, MIN(L->start->x, L->end->x));
+    min_y = MIN(min_y, MIN(L->start->y, L->end->y));
+    max_x = MAX(max_x, MAX(L->start->x, L->end->x));
+    max_y = MAX(max_y, MAX(L->start->y, L->end->y));
+  }
+
+  block_x = (int) floor(min_x) - 8;
+  block_y = (int) floor(min_y) - 8;
+
+  block_w = (int) floor((max_x - min_x + 16) / 128) + 1;
+  block_h = (int) floor((max_y - min_y + 16) / 128) + 1;
+  block_count = block_w * block_h;
+}
+
+//
 // TruncateBlockmap
 //
 static void TruncateBlockmap(void)
@@ -584,7 +659,7 @@ void InitBlockmap(void)
 //
 void PutBlockmap(void)
 {
-  block_overflowed = FALSE;
+  UseMidwayBounds();
 
   // truncate blockmap if too large.  We're limiting the number of
   // blocks to around 16000 (user changeable), this leaves about 48K
@@ -598,21 +673,27 @@ void PutBlockmap(void)
   
   CreateBlockmap();
 
-  // -AJA- second phase: compress the blockmap.  We do this by sorting
+  // second phase: a list for each block.  If that does not fit...
+
+  block_compression = 0;
+  block_shared = ! LayoutBlockmap();
+
+  // -AJA- ...compress the blockmap.  We do this by sorting
   //       the blocks, which is a typical way to detect duplicates in
   //       a large list.
 
-  CompressBlockmap();
+  if (block_shared)
+  {
+    PrintMiniWarn("Blockmap too large for a list per block: lists are shared\n");
+    CompressBlockmap();
+  }
  
   // final phase: write it out in the correct format
 
   WriteBlockmap();
 
-  if (block_overflowed)
-    PrintVerbose("Blockmap overflowed (lump will be empty)\n");
-  else
-    PrintVerbose("Completed blockmap, size %dx%d (compression: %d%%)\n",
-        block_w, block_h, block_compression);
+  PrintVerbose("Completed blockmap, size %dx%d (compression: %d%%)\n",
+      block_w, block_h, block_compression);
 
   FreeBlockmap();
 }

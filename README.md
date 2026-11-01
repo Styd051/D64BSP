@@ -4,8 +4,8 @@ D64BSP is a node builder for Doom 64 maps. It is glBSP 2.24 by Andrew Apted, ada
 Samuel Villarreal (Kaiser) in 2011. It builds the lumps VERTEXES, SEGS, SSECTORS, NODES, LEAFS, BLOCKMAP and REJECT
 of a map. [Doom Builder 64 II](https://github.com/Styd051/Doom-Builder-64-II) runs it when a map is saved.
 
-MAP34 to MAP40 of the 2020 remaster were built with this program: it gives back the 13 lumps of these 7 maps, byte
-for byte.
+MAP34 to MAP40 of the 2020 remaster were built with this program: the version of Kaiser gives back the 13 lumps of
+these 7 maps, byte for byte.
 
 ## History
 
@@ -15,8 +15,9 @@ for byte.
   - `aa9de18`: all the lines over the same two points get their segs, and only one of them goes into LEAFS, as
     Midway did; two lines in the same direction at a vertex no longer leave a polygon open; the partitions of
     lines with fractions stay close to the true line.
+  - the BLOCKMAP follows the rule of the tool of Midway, which gives back the lump of MAP01 to MAP33, byte for byte.
 - A map with no overlapping lines and no fractions in the vertices of its lines gives the same lumps as the
-  version of Kaiser.
+  version of Kaiser, except the BLOCKMAP.
 
 ## Building
 
@@ -35,7 +36,7 @@ cmake --build build --config Release
 
 Build it for 32 bits. `/arch:IA32` keeps the floating point of the x87, which `CMakeLists.txt` sets for a 32-bit
 build. With SSE2, or in a 64-bit build (the default of CMake without `-A Win32`), the angle of a few segs changes
-by one step in 65536: the maps still work, but MAP35 and MAP38 are then no longer the bytes of the game.
+by one step in 65536: the maps still work, but SEGS then differs from the lump of the game on MAP35 and MAP38.
 
 `msvc6` holds the Visual C++ 6 project of Kaiser, and `Makefile` his gcc build. They were not tried in 2026.
 
@@ -90,10 +91,18 @@ a `SCRIPTS` lump after `MACROS`.
 | `NODES` | 28, whole numbers | Built |
 | `SECTORS` | 24 | Copied |
 | `REJECT` | one bit for each pair of sectors | Built: only the groups of sectors that do not touch |
-| `BLOCKMAP` | 16-bit numbers | Built |
+| `BLOCKMAP` | 16-bit numbers | Built: a list for each block, as Midway did |
 | `LEAFS` | a count, then (vertex, seg) for each corner | Built: the polygon of each subsector, clockwise, seg -1 for an edge without a wall |
 | `LIGHTS` | 6 | Copied |
 | `MACROS` | see [D64BLAM](https://github.com/Styd051/D64BLAM) | Copied |
+
+The rule of the BLOCKMAP comes from the 33 lumps of Midway:
+
+- The origin is the lowest coordinates of the lines, rounded down, minus 8. The size is
+  `floor((highest - lowest + 16) / 128) + 1` blocks.
+- Each block has its own list, in the order of the blocks: its lines by number, then -1, and no line 0 at the start.
+- With the exact coordinates, a line is in a block when its bounds reach the block, the high edges of the block being
+  left out, and the four corners of the block are not strictly on the same side of the line.
 
 ## What the engines do with these lumps
 
@@ -119,14 +128,13 @@ They agree on the rest:
 
 ## Differences from the maps of Midway
 
-MAP01 to MAP33 were built with the tool of Midway. D64BSP does not give the same lumps, and the maps still work:
+MAP01 to MAP33 were built with the tool of Midway. D64BSP gives back their BLOCKMAP byte for byte. The other lumps it
+builds are not the same, and the maps still work:
 
 | | Midway | D64BSP |
 |---|---|---|
 | Offset of a seg that does not start on a whole number | Rounded down | Rounded up, as in MAP34 to MAP40 |
 | New vertices | Written once | Written twice, the first copy is not used |
-| BLOCKMAP origin | 8 units before the map | At the map, rounded down to a multiple of 8 |
-| BLOCKMAP lists | The line 0 when it is there | Always start with the line 0, which tests it for nothing |
 | REJECT | A partial table, its method is not known | The groups of sectors that do not touch |
 | Direction of a partition | Scaled to a length of 256 | The line itself |
 | Vertices on the wrong side of a partition, worst case on MAP01 to MAP33 | 3.43 units | 0.50 units |
@@ -135,8 +143,9 @@ MAP01 to MAP33 were built with the tool of Midway. D64BSP does not give the same
 
 - 32 corners for a floor on the Nintendo 64. D64BSP does not check it. The largest leaf of the maps of the game has 30.
 - 32767 vertices, segs and subsectors on the Nintendo 64. D64BSP does not check the vertices.
-- The offsets of the BLOCKMAP are signed in the three engines, but D64BSP accepts them up to 65535 and writes an
-  empty lump above that. The largest seen is 15250, in a map of the Mzansi project.
+- The offsets of the BLOCKMAP are signed in the three engines: a list must start within the first 32767 words. When
+  a list for each block goes beyond that, the blocks with the same lines share one list. When that is not enough,
+  D64BSP stops with an error and writes nothing. The largest lump seen has 17360 words, in a map of the Mzansi project.
 - Above 16000 blocks the BLOCKMAP is cut, and lines outside of it no longer stop things. Use `-b` for a larger map.
 - Sectors and lines with the tags 900 to 999 keep the rules of glBSP for special effects of Doom: such a line is
   avoided as a partition. The maps of the game do not need this.
