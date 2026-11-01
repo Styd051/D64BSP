@@ -801,7 +801,15 @@ void PutLeafs(void)
 	{
 		subsec_t *sub = subsecs[i];
 		seg_t *seg;
-		AppendLevelLump(lump, &sub->seg_count, 2);
+		int count = 0;
+
+		for(seg = sub->seg_list; seg; seg = seg->next)
+		{
+			if(!seg->hidden)
+				count++;
+		}
+
+		AppendLevelLump(lump, &count, 2);
 
 		seg = sub->seg_list;
 
@@ -810,6 +818,14 @@ void PutLeafs(void)
 			vertex_t *vert;
 			static const int miniseg = -1;
 			int v;
+
+			// keeps its number in SEGS, but is not part of the polygon
+			if(seg->hidden)
+			{
+				idx++;
+				seg = seg->next;
+				continue;
+			}
 
 			vert = seg->start;
 			v = vert->index;

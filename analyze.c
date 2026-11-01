@@ -923,6 +923,18 @@ static void VertexAddWallTip(vertex_t *vert, float_g dx, float_g dy,
   while (after && tip->angle + ANG_EPSILON < after->angle) 
     after = after->prev;
   
+  // overlapping lines make one tip: keep the sectors of both
+  if (after && fabs(tip->angle - after->angle) < ANG_EPSILON)
+  {
+    if (! after->left)
+      after->left = left;
+
+    if (! after->right)
+      after->right = right;
+
+    return;
+  }
+
   // link it in
   tip->next = after ? after->next : vert->tip_set;
   tip->prev = after;

@@ -203,7 +203,7 @@ typedef struct linedef_s
   
   // normally NULL, except when this linedef directly overlaps an earlier
   // one (a rarely-used trick to create higher mid-masked textures).
-  // No segs should be created for these overlapping linedefs.
+  // These lines keep their segs: see MarkHiddenSegs in node.c.
   struct linedef_s *overlap;
 
   // linedef index.  Always valid after loading & pruning of zero
@@ -261,6 +261,11 @@ typedef struct seg_s
   // ignored when writing the SEGS or V1 GL_SEGS lumps.  [Note: there
   // won't be any of these when writing the V2 GL_SEGS lump].
   int degenerate;
+
+  // when 1, another line of this subsector has a seg over the same two
+  // points, and this seg stays out of the LEAFS lump (it is still
+  // written to SEGS and SSECTORS).  See MarkHiddenSegs in node.c.
+  int hidden;
  
   // the superblock that contains this seg, or NULL if the seg is no
   // longer in any superblock (e.g. now in a subsector).

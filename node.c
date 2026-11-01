@@ -408,10 +408,6 @@ superblock_t *CreateSegs(void)
     if (line->zero_len)
       continue;
 
-    // ignore overlapping lines
-    if (line->overlap)
-      continue;
-
     // ignore self-referencing lines (only when explicitly disabled)
     if (line->self_ref && cur_info->skip_self_ref)
       continue;
@@ -511,6 +507,45 @@ static void DetermineMiddle(subsec_t *sub)
 }
 
 //
+// MarkHiddenSegs
+//
+// The engines draw walls from the LEAFS lump, but they get the angle of
+// a line and the sight checks from the SEGS lump.  So lines over the
+// same two points all need their segs, and only the line with the
+// highest number goes into LEAFS, as in MAP02 of the game.
+//
+static void MarkHiddenSegs(subsec_t *sub)
+{
+  seg_t *A, *B;
+
+  for (A=sub->seg_list; A; A=A->next)
+  {
+    if (! A->linedef)
+      continue;
+
+    for (B=sub->seg_list; B; B=B->next)
+    {
+      if (! B->linedef || B->linedef->index <= A->linedef->index)
+        continue;
+
+      // tiny pieces of two different lines can also meet here
+      if ((A->linedef->overlap ? A->linedef->overlap : A->linedef) !=
+          (B->linedef->overlap ? B->linedef->overlap : B->linedef))
+        continue;
+
+      if (fabs(A->psx - B->psx) <= DIST_EPSILON &&
+          fabs(A->psy - B->psy) <= DIST_EPSILON &&
+          fabs(A->pex - B->pex) <= DIST_EPSILON &&
+          fabs(A->pey - B->pey) <= DIST_EPSILON)
+      {
+        A->hidden = 1;
+        break;
+      }
+    }
+  }
+}
+
+//
 // ClockwiseOrder
 //
 // -AJA- Put the list of segs into clockwise order.
@@ -589,7 +624,7 @@ static void ClockwiseOrder(subsec_t *sub)
 
     if (! array[i]->linedef)
       cur_score = 0;
-    else if (array[i]->linedef->window_effect)
+    else if (array[i]->linedef->window_effect || array[i]->hidden)
       cur_score = 1;
     else if (array[i]->linedef->self_ref)
       cur_score = 2;
@@ -639,7 +674,16 @@ static void SanityCheckClosed(subsec_t *sub)
 
   for (cur=sub->seg_list; cur; cur=cur->next)
   {
-    next = cur->next ? cur->next : sub->seg_list;
+    if (cur->hidden)
+      continue;
+
+    next = cur->next;
+
+    while (next && next->hidden)
+      next = next->next;
+
+    if (! next)
+      next = sub->seg_list;
 
     if (cur->end->x != next->start->x || cur->end->y != next->start->y)
       gaps++;
@@ -866,6 +910,167 @@ static void DebugShowSegs(superblock_t *seg_list)
 #endif
 
 //
+// PartitionError
+//
+// How far the segs of a list go over to the wrong side of a partition
+// line.  'side' is +1 for the list on the right, -1 for the one on the
+// left.
+//
+static float_g PartitionError(superblock_t *block, int x, int y,
+    int dx, int dy, int side)
+{
+  seg_t *cur;
+  int num;
+
+  float_g len = UtilComputeDist(dx, dy);
+  float_g worst = 0;
+
+  // a short line can lose all its length when its fractions are cut off
+  if (len == 0)
+    return 1e9;
+
+  for (cur=block->segs; cur; cur=cur->next)
+  {
+    float_g a = ((cur->psx - x) * dy - (cur->psy - y) * dx) * side / len;
+    float_g b = ((cur->pex - x) * dy - (cur->pey - y) * dx) * side / len;
+
+    if (-a > worst) worst = -a;
+    if (-b > worst) worst = -b;
+  }
+
+  for (num=0; num < 2; num++)
+  {
+    if (block->subs[num])
+    {
+      float_g sub = PartitionError(block->subs[num], x, y, dx, dy, side);
+
+      if (sub > worst)
+        worst = sub;
+    }
+  }
+
+  return worst;
+}
+
+//
+// FitPartition
+//
+// The NODES lump only holds whole numbers.  Cutting the fractions off
+// the ends of a line turns it, and far from the line the segs end up on
+// the wrong side.  So for such a line, take whole points close to the
+// true line inside the node, and keep the two that leave the segs of
+// both children the least on the wrong side.
+//
+#define FIT_BUCKETS   16
+#define FIT_MAX_SPAN  16384
+
+static void FitPartition(node_t *node, seg_t *best,
+    superblock_t *lefts, superblock_t *rights)
+{
+  linedef_t *L = best->linedef;
+
+  float_g sx = best->side ? L->end->x : L->start->x;
+  float_g sy = best->side ? L->end->y : L->start->y;
+  float_g ex = best->side ? L->start->x : L->end->x;
+  float_g ey = best->side ? L->start->y : L->end->y;
+
+  float_g lx = ex - sx;
+  float_g ly = ey - sy;
+
+  int steep = (fabs(ly) > fabs(lx));
+
+  int cand_a[FIT_BUCKETS];
+  int cand_b[FIT_BUCKETS];
+  float_g cand_err[FIT_BUCKETS];
+
+  float_g best_err;
+
+  int lo, hi, mid;
+  int i, j, t;
+
+  if (sx == floor(sx) && sy == floor(sy) && ex == floor(ex) && ey == floor(ey))
+    return;
+
+  best_err = MAX(PartitionError(rights, node->x, node->y, node->dx, node->dy, +1),
+                 PartitionError(lefts,  node->x, node->y, node->dx, node->dy, -1));
+
+  if (steep)
+  {
+    lo = MIN(node->l.bounds.miny, node->r.bounds.miny);
+    hi = MAX(node->l.bounds.maxy, node->r.bounds.maxy);
+    mid = (int) floor((sy + ey) / 2);
+  }
+  else
+  {
+    lo = MIN(node->l.bounds.minx, node->r.bounds.minx);
+    hi = MAX(node->l.bounds.maxx, node->r.bounds.maxx);
+    mid = (int) floor((sx + ex) / 2);
+  }
+
+  lo = MAX(lo, mid - FIT_MAX_SPAN / 2);
+  hi = MIN(hi, mid + FIT_MAX_SPAN / 2);
+
+  for (i=0; i < FIT_BUCKETS; i++)
+    cand_err[i] = -1;
+
+  // the best whole point of each part of the line
+  for (t=lo; t <= hi; t++)
+  {
+    float_g other = steep ? sx + (t - sy) * lx / ly : sy + (t - sx) * ly / lx;
+    float_g b = floor(other + 0.5);
+    float_g err = fabs(b - other);
+
+    i = (t - lo) * FIT_BUCKETS / (hi - lo + 1);
+
+    if (cand_err[i] < 0 || err < cand_err[i])
+    {
+      cand_err[i] = err;
+      cand_a[i] = t;
+      cand_b[i] = (int) b;
+    }
+  }
+
+  // the two that work best
+  for (i=0; i < FIT_BUCKETS; i++)
+  for (j=i+1; j < FIT_BUCKETS; j++)
+  {
+    int x1, y1, dx, dy;
+    float_g err;
+
+    if (cand_err[i] < 0 || cand_err[j] < 0)
+      continue;
+
+    x1 = steep ? cand_b[i] : cand_a[i];
+    y1 = steep ? cand_a[i] : cand_b[i];
+    dx = (steep ? cand_b[j] : cand_a[j]) - x1;
+    dy = (steep ? cand_a[j] : cand_b[j]) - y1;
+
+    // keep the direction of the line, or the children would swap
+    if (dx * lx + dy * ly < 0)
+    {
+      x1 += dx;
+      y1 += dy;
+      dx = -dx;
+      dy = -dy;
+    }
+
+    err = MAX(PartitionError(rights, x1, y1, dx, dy, +1),
+              PartitionError(lefts,  x1, y1, dx, dy, -1));
+
+    if (err < best_err)
+    {
+      best_err = err;
+
+      node->x = x1;
+      node->y = y1;
+      node->dx = dx;
+      node->dy = dy;
+      node->too_long = 0;
+    }
+  }
+}
+
+//
 // BuildNodes
 //
 glbsp_ret_e BuildNodes(superblock_t *seg_list, 
@@ -976,6 +1181,8 @@ glbsp_ret_e BuildNodes(superblock_t *seg_list,
   FindLimits(lefts,  &node->l.bounds);
   FindLimits(rights, &node->r.bounds);
 
+  FitPartition(node, best, lefts, rights);
+
 # if DEBUG_BUILDER
   PrintDebug("Build: Going LEFT\n");
 # endif
@@ -1022,6 +1229,7 @@ void ClockwiseBspTree(node_t *root)
   {
     subsec_t *sub = LookupSubsec(i);
 
+    MarkHiddenSegs(sub);
     ClockwiseOrder(sub);
     RenumberSubsecSegs(sub);
 
